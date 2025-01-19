@@ -46,14 +46,19 @@ class Program
 
             string[] requestFirstLine = requestHeaders.requestType.Split(" ");
             var requestedPath = requestFirstLine[1];
+            if (requestedPath == "/")
+            {
+                requestedPath = "default.html";
+            }
+            Console.WriteLine($"PATH: {requestedPath}");
             string httpVersion = requestFirstLine.LastOrDefault();
             string contentType = requestHeaders.headers.GetValueOrDefault("Accept");
             string contentEncoding = requestHeaders.headers.GetValueOrDefault("Acept-Encoding");
-            var fileContent = GetContent(requestedPath);
-            if (fileContent is not null)
+            (byte[]? content, string responseContentType) = GetContent(requestedPath).Result;
+            if (content is not null)
             {
-                SendHeaders(httpVersion, 200, "OK", requestedPath.Contains("image") ? "image" : $"text/{requestedPath.Substring(requestedPath.IndexOf(".") + 1)}", contentEncoding, 0, ref stream);
-                stream.Write(fileContent.Result);
+                SendHeaders(httpVersion, 200, "OK", responseContentType, contentEncoding, 0, ref stream);
+                stream.Write(content);
                 sw.Stop();
                 Console.WriteLine($"Took {sw.ElapsedMilliseconds}");
             }
@@ -101,7 +106,7 @@ class Program
         byte[] responseBytes = Encoding.UTF8.GetBytes(responseHeaderBuffer);
         networkStream.Write(responseBytes, 0, responseBytes.Length);
     }
-    private static async Task<byte[]?> GetContent(string requestedPath)
+    private static async Task<(byte[]?, string)> GetContent(string requestedPath)
     {
         if (imageIds == null)
         {
@@ -120,20 +125,36 @@ class Program
                 }
             }
         }
-        if (requestedPath == "/") requestedPath = "default.html";
         string filePath = Path.Join(WebServerPath, requestedPath);
         if (filePath.Contains("image"))
         {
             DriveAccess dr = new();
-            return await dr.GetFile(imageIds[rnd.Next(imageIds.Count)]);
+            byte[]? bytes = await dr.GetFile(imageIds[rnd.Next(imageIds.Count)]);
+            return (bytes, "image");
         }
 
-        if (!File.Exists(filePath)) return null;
+        if (!File.Exists(filePath)) return (null, "");
+
+        if (filePath.Contains("favicon"))
+        {
+            byte[] file = System.IO.File.ReadAllBytes(filePath);
+            return (file, "image/x-icon");
+        }
 
         else
         {
             byte[] file = System.IO.File.ReadAllBytes(filePath);
-            return file;
+            return (file, GetMimeType(filePath));
         }
+    }
+
+    private static string GetMimeType(string fileName)
+    {
+        string mimeType = "application/unknown";
+        string ext = System.IO.Path.GetExtension(fileName).ToLower();
+        Microsoft.Win32.RegistryKey regKey = Microsoft.Win32.Registry.ClassesRoot.OpenSubKey(ext);
+        if (regKey != null && regKey.GetValue("Content Type") != null)
+            mimeType = regKey.GetValue("Content Type").ToString();
+        return mimeType;
     }
 }
