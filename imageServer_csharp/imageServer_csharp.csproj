@@ -28,10 +28,31 @@
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
 	  <ExcludeFromPublish>true</ExcludeFromPublish>
     </None>
+    <None Update="Webserver\android-chrome-192x192.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+    <None Update="Webserver\android-chrome-512x512.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
     <None Update="Webserver\AnimeHoodies_1hfd6j1.jpeg">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
+    <None Update="Webserver\apple-touch-icon.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
     <None Update="Webserver\default.html">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+    <None Update="Webserver\favicon-16x16.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+    <None Update="Webserver\favicon-32x32.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+    <None Update="Webserver\favicon.ico">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+    <None Update="Webserver\site.webmanifest">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
     <None Update="Webserver\style.css">
