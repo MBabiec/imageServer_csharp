@@ -4,6 +4,7 @@ using Google.Apis.Services;
 using Microsoft.VisualBasic.FileIO;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Net;
 using System.Text;
@@ -16,7 +17,7 @@ namespace imageServer_csharp.Drive
         private const string PathToServiceAccountKeyFile = @"Drive/serviceAccountCredentials.json";
         private static Queue<byte[]> images = new();
         private static List<string> imageIds;
-        private static Random rnd = new Random();
+        private static readonly Random rnd = new();
 
         private static DriveService GetService()
         {
@@ -86,8 +87,11 @@ namespace imageServer_csharp.Drive
 
             while (images.Count < 10)
             {
+                Stopwatch sw = Stopwatch.StartNew();
                 var im = GetFile(imageIds[rnd.Next(imageIds.Count)]);
                 images.Enqueue(im.Result);
+                sw.Stop();
+                Console.WriteLine($"Got new image in {sw.ElapsedMilliseconds}");
             }
         }
     }
