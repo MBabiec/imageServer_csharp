@@ -1,4 +1,5 @@
 ﻿using Google.Apis.Auth.OAuth2;
+using Google.Apis.Download;
 using Google.Apis.Drive.v3;
 using Google.Apis.Services;
 using Microsoft.VisualBasic.FileIO;
@@ -33,9 +34,9 @@ namespace imageServer_csharp.Drive
 
         public static async Task<byte[]> GetNextImage()
         {
-            while (images.Count < 1)
+            if (images.Count == 0)
             {
-                await Task.Delay(100);
+                return await GetFile(imageIds[rnd.Next(0, imageIds.Count)]);
             }
             return images.Dequeue();
         }
@@ -48,6 +49,7 @@ namespace imageServer_csharp.Drive
                 var service = GetService();
                 MemoryStream ms = new();
                 var file = service.Files.Get(fileId);
+                file.MediaDownloader.ProgressChanged += Download_ProgressChanged;
                 var res = await file.DownloadAsync(ms);
                 if (res.Status.Equals(Google.Apis.Download.DownloadStatus.Completed))
                 {
@@ -65,38 +67,59 @@ namespace imageServer_csharp.Drive
             }
         }
 
-        public static void Worker()
+        public static async Task WorkerAsync()
         {
-            while (true)
+            if (imageIds == null)
             {
-                if (imageIds == null)
+                imageIds = [];
+                var path = @"Drive/data.csv";
+                using (TextFieldParser csvParser = new TextFieldParser(path))
                 {
-                    imageIds = [];
-                    var path = @"Drive/data.csv";
-                    using (TextFieldParser csvParser = new TextFieldParser(path))
-                    {
-                        csvParser.CommentTokens = ["#"];
-                        csvParser.SetDelimiters([","]);
-                        csvParser.HasFieldsEnclosedInQuotes = true;
+                    csvParser.CommentTokens = ["#"];
+                    csvParser.SetDelimiters([","]);
+                    csvParser.HasFieldsEnclosedInQuotes = true;
 
-                        while (!csvParser.EndOfData)
-                        {
-                            string[] fields = csvParser.ReadFields();
-                            imageIds.Add(fields[0]);
-                        }
+                    while (!csvParser.EndOfData)
+                    {
+                        string[] fields = csvParser.ReadFields();
+                        imageIds.Add(fields[0]);
                     }
                 }
-
-                while (images.Count < 5)
-                {
-                    Stopwatch sw = Stopwatch.StartNew();
-                    var im = GetFile(imageIds[rnd.Next(imageIds.Count)]);
-                    images.Enqueue(im.Result);
-                    sw.Stop();
-                    Console.WriteLine($"Got new image in {sw.ElapsedMilliseconds}");
-                }
-                System.Threading.Thread.Sleep(100);
             }
+
+            while (true)
+            {
+
+                if (images.Count < 5)
+                {
+                    try
+                    {
+                        Stopwatch sw = Stopwatch.StartNew();
+                        Console.WriteLine("Requesting image");
+                        var im = await GetFile(imageIds[rnd.Next(imageIds.Count)]);
+                        Console.WriteLine("Got image, adding to queue");
+                        if (im != null)
+                        {
+                            images.Enqueue(im);
+                        }
+                        sw.Stop();
+                        //Console.WriteLine($"Got new image in {sw.ElapsedMilliseconds}");
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine(ex.Message);
+                    }
+                }
+                else
+                {
+                    System.Threading.Thread.Sleep(100);
+                }
+            }
+            Console.WriteLine("Image worker crashed...");
+        }
+        static void Download_ProgressChanged(IDownloadProgress progress)
+        {
+            Console.WriteLine(progress.Status + " " + progress.BytesDownloaded);
         }
     }
 }

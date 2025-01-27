@@ -16,21 +16,10 @@ class Program
 
     static void Main(string[] args)
     {
-        using (StreamReader r = new StreamReader("server_conf.json"))
-        {
-            string json = r.ReadToEnd();
-            dynamic array = JsonConvert.DeserializeObject(json);
-            string host = array.hostname;
-            int port = array.port;
-            listener = new TcpListener(IPAddress.Parse(host), port);
-            Console.WriteLine($"Webserver started on {array.hostname}:{array.port}");
-            listener.Start();
-        }
-        Thread th = new (new ThreadStart(StartListen));
+        Thread th = new(new ThreadStart(Watcher));
         th.Start();
-        Thread th2 = new (new ThreadStart(Watcher));
-        th2.Start();
-        Task task = Task.Run((Action)DriveAccess.Worker);
+        DriveAccess.WorkerAsync();
+        RunServerAsync();
     }
 
     private static void Watcher()
@@ -42,65 +31,99 @@ class Program
         }
     }
 
-    private static void StartListen()
+    private static async Task Accept(TcpClient client)
     {
-        while (true)
+        await Task.Yield();
+        Console.WriteLine("Accepted client");
+        try
         {
-            TcpClient client = listener.AcceptTcpClient();
-            NetworkStream stream = client.GetStream();
-            byte[] requestBytes = new byte[1024];
-            int bytesRead = stream.Read(requestBytes, 0, requestBytes.Length);
-
-            Stopwatch sw = Stopwatch.StartNew();
-            string request = Encoding.UTF8.GetString(requestBytes, 0, bytesRead);
-            if (string.IsNullOrEmpty(request))
+            using (client)
+            using (NetworkStream stream = client.GetStream())
             {
-                Console.WriteLine("Empty request");
-                SendHeaders("", 400, "Bad Request", "", "", 0, ref stream);
+                byte[] requestBytes = new byte[1024];
+                int bytesRead = stream.Read(requestBytes, 0, requestBytes.Length);
+
+                Stopwatch sw = Stopwatch.StartNew();
+                string request = Encoding.UTF8.GetString(requestBytes, 0, bytesRead);
+                if (string.IsNullOrEmpty(request))
+                {
+                    Console.WriteLine("Empty request");
+                    SendHeaders("", 400, "Bad Request", "", "", 0, stream);
+                    client.Close();
+                    return;
+                }
+                var requestHeaders = ParseHeaders(request);
+
+                string[] requestFirstLine = requestHeaders.requestType.Split(" ");
+                var requestedPath = requestFirstLine[1];
+                if (requestedPath == "/")
+                {
+                    requestedPath = "default.html";
+                }
+                //Console.WriteLine($"PATH: {requestedPath}");
+                string httpVersion = requestFirstLine.LastOrDefault();
+                string contentType = requestHeaders.headers.GetValueOrDefault("Accept");
+                string contentEncoding = requestHeaders.headers.GetValueOrDefault("Acept-Encoding");
+                (byte[]? content, string responseContentType) = GetContent(requestedPath).Result;
+                try
+                {
+                    if (content is not null)
+                    {
+                        SendHeaders(httpVersion, 200, "OK", responseContentType, contentEncoding, 0, stream);
+                        stream.Write(content);
+                        sw.Stop();
+                        Console.WriteLine($"Took {sw.ElapsedMilliseconds}");
+                    }
+                    else
+                    {
+                        SendHeaders(httpVersion, 404, "Page Not Found", contentType, contentEncoding, 0, stream);
+                    }
+
+                    if (requestFirstLine[0] != "GET")
+                    {
+                        SendHeaders(httpVersion, 405, "Method Not Allowed", contentType, contentEncoding, 0, stream);
+                        //DUPA
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine(ex.Message);
+                }
+
                 client.Close();
-                continue;
             }
-            var requestHeaders = ParseHeaders(request);
-
-            string[] requestFirstLine = requestHeaders.requestType.Split(" ");
-            var requestedPath = requestFirstLine[1];
-            if (requestedPath == "/")
-            {
-                requestedPath = "default.html";
-            }
-            Console.WriteLine($"PATH: {requestedPath}");
-            string httpVersion = requestFirstLine.LastOrDefault();
-            string contentType = requestHeaders.headers.GetValueOrDefault("Accept");
-            string contentEncoding = requestHeaders.headers.GetValueOrDefault("Acept-Encoding");
-            (byte[]? content, string responseContentType) = GetContent(requestedPath).Result;
-            try
-            {
-                if (content is not null)
-                {
-                    SendHeaders(httpVersion, 200, "OK", responseContentType, contentEncoding, 0, ref stream);
-                    stream.Write(content);
-                    sw.Stop();
-                    Console.WriteLine($"Took {sw.ElapsedMilliseconds}");
-                }
-                else
-                {
-                    SendHeaders(httpVersion, 404, "Page Not Found", contentType, contentEncoding, 0, ref stream);
-                }
-
-                if (requestFirstLine[0] != "GET")
-                {
-                    SendHeaders(httpVersion, 405, "Method Not Allowed", contentType, contentEncoding, 0, ref stream);
-                    //DUPA
-                }
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine(ex.Message);
-            }
-
-            client.Close();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine(ex.Message);
         }
     }
+
+    private static async void RunServerAsync()
+    {
+        using (StreamReader r = new StreamReader("server_conf.json"))
+        {
+            string json = r.ReadToEnd();
+            dynamic array = JsonConvert.DeserializeObject(json);
+            string host = array.hostname;
+            int port = array.port;
+            listener = new TcpListener(IPAddress.Parse(host), port);
+            Console.WriteLine($"Webserver started on {array.hostname}:{array.port}");
+            listener.Start();
+            try
+            {
+                while (true)
+                {
+                    Accept(await listener.AcceptTcpClientAsync());
+                }
+            }
+            finally
+            {
+                listener.Stop();
+            }
+        }
+    }
+
     private static (Dictionary<string, string> headers, string requestType) ParseHeaders(string headerString)
     {
         var headerLines = headerString.Split('\r', '\n');
@@ -119,7 +142,7 @@ class Program
         }
         return (headerValues, firstLine);
     }
-    private static void SendHeaders(string? httpVersion, int statusCode, string statusMsg, string? contentType, string? contentEncoding, int byteLength, ref NetworkStream networkStream)
+    private static void SendHeaders(string? httpVersion, int statusCode, string statusMsg, string? contentType, string? contentEncoding, int byteLength, NetworkStream networkStream)
     {
         string responseHeaderBuffer = "";
 
