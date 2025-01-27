@@ -67,31 +67,35 @@ namespace imageServer_csharp.Drive
 
         public static void Worker()
         {
-            if (imageIds == null)
+            while (true)
             {
-                imageIds = [];
-                var path = @"Drive/data.csv";
-                using (TextFieldParser csvParser = new TextFieldParser(path))
+                if (imageIds == null)
                 {
-                    csvParser.CommentTokens = ["#"];
-                    csvParser.SetDelimiters([","]);
-                    csvParser.HasFieldsEnclosedInQuotes = true;
-
-                    while (!csvParser.EndOfData)
+                    imageIds = [];
+                    var path = @"Drive/data.csv";
+                    using (TextFieldParser csvParser = new TextFieldParser(path))
                     {
-                        string[] fields = csvParser.ReadFields();
-                        imageIds.Add(fields[0]);
+                        csvParser.CommentTokens = ["#"];
+                        csvParser.SetDelimiters([","]);
+                        csvParser.HasFieldsEnclosedInQuotes = true;
+
+                        while (!csvParser.EndOfData)
+                        {
+                            string[] fields = csvParser.ReadFields();
+                            imageIds.Add(fields[0]);
+                        }
                     }
                 }
-            }
 
-            while (images.Count < 10)
-            {
-                Stopwatch sw = Stopwatch.StartNew();
-                var im = GetFile(imageIds[rnd.Next(imageIds.Count)]);
-                images.Enqueue(im.Result);
-                sw.Stop();
-                Console.WriteLine($"Got new image in {sw.ElapsedMilliseconds}");
+                while (images.Count < 5)
+                {
+                    Stopwatch sw = Stopwatch.StartNew();
+                    var im = GetFile(imageIds[rnd.Next(imageIds.Count)]);
+                    images.Enqueue(im.Result);
+                    sw.Stop();
+                    Console.WriteLine($"Got new image in {sw.ElapsedMilliseconds}");
+                }
+                System.Threading.Thread.Sleep(100);
             }
         }
     }
