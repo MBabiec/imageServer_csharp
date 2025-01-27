@@ -73,23 +73,31 @@ class Program
             string contentType = requestHeaders.headers.GetValueOrDefault("Accept");
             string contentEncoding = requestHeaders.headers.GetValueOrDefault("Acept-Encoding");
             (byte[]? content, string responseContentType) = GetContent(requestedPath).Result;
-            if (content is not null)
+            try
             {
-                SendHeaders(httpVersion, 200, "OK", responseContentType, contentEncoding, 0, ref stream);
-                stream.Write(content);
-                sw.Stop();
-                Console.WriteLine($"Took {sw.ElapsedMilliseconds}");
+                if (content is not null)
+                {
+                    SendHeaders(httpVersion, 200, "OK", responseContentType, contentEncoding, 0, ref stream);
+                    stream.Write(content);
+                    sw.Stop();
+                    Console.WriteLine($"Took {sw.ElapsedMilliseconds}");
+                }
+                else
+                {
+                    SendHeaders(httpVersion, 404, "Page Not Found", contentType, contentEncoding, 0, ref stream);
+                }
+
+                if (requestFirstLine[0] != "GET")
+                {
+                    SendHeaders(httpVersion, 405, "Method Not Allowed", contentType, contentEncoding, 0, ref stream);
+                    //DUPA
+                }
             }
-            else
+            catch (Exception ex)
             {
-                SendHeaders(httpVersion, 404, "Page Not Found", contentType, contentEncoding, 0, ref stream);
+                Console.WriteLine(ex.Message);
             }
 
-            if (requestFirstLine[0] != "GET")
-            {
-                SendHeaders(httpVersion, 405, "Method Not Allowed", contentType, contentEncoding, 0, ref stream);
-                //DUPA
-            }
             client.Close();
         }
     }
