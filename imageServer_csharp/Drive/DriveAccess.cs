@@ -14,8 +14,11 @@ namespace imageServer_csharp.Drive
     public class DriveAccess
     {
         private const string PathToServiceAccountKeyFile = @"Drive/serviceAccountCredentials.json";
+        private static Queue<byte[]> images = new();
+        private static List<string> imageIds;
+        private static Random rnd = new Random();
 
-        private DriveService GetService()
+        private static DriveService GetService()
         {
             string credJson = File.ReadAllText(PathToServiceAccountKeyFile);
             GoogleCredential credential1 = GoogleCredential.FromJson(credJson);
@@ -27,7 +30,16 @@ namespace imageServer_csharp.Drive
             return service;
         }
 
-        public async Task<byte[]?> GetFile(string fileId)
+        public static async Task<byte[]> GetNextImage()
+        {
+            while (images.Count < 1)
+            {
+                await Task.Delay(100);
+            }
+            return images.Dequeue();
+        }
+
+        private static async Task<byte[]?> GetFile(string fileId)
         {
             //return System.IO.File.ReadAllBytes("Drive/AnimeHoodies_1hfd6j1.jpeg");
             try
@@ -49,6 +61,33 @@ namespace imageServer_csharp.Drive
             {
                 Console.WriteLine(ex);
                 return null;
+            }
+        }
+
+        public static void Worker()
+        {
+            if (imageIds == null)
+            {
+                imageIds = [];
+                var path = @"Drive/data.csv";
+                using (TextFieldParser csvParser = new TextFieldParser(path))
+                {
+                    csvParser.CommentTokens = ["#"];
+                    csvParser.SetDelimiters([","]);
+                    csvParser.HasFieldsEnclosedInQuotes = true;
+
+                    while (!csvParser.EndOfData)
+                    {
+                        string[] fields = csvParser.ReadFields();
+                        imageIds.Add(fields[0]);
+                    }
+                }
+            }
+
+            while (images.Count < 10)
+            {
+                var im = GetFile(imageIds[rnd.Next(imageIds.Count)]);
+                images.Enqueue(im.Result);
             }
         }
     }

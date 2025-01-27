@@ -13,8 +13,6 @@ class Program
 {
     private static TcpListener listener;
     private static readonly string WebServerPath = @"Webserver";
-    private static List<string> imageIds;
-    private static Random rnd = new Random();
 
     static void Main(string[] args)
     {
@@ -28,9 +26,22 @@ class Program
             Console.WriteLine($"Webserver started on {array.hostname}:{array.port}");
             listener.Start();
         }
-        Thread th = new Thread(new ThreadStart(StartListen));
+        Thread th = new (new ThreadStart(StartListen));
         th.Start();
+        Thread th2 = new (new ThreadStart(Watcher));
+        th2.Start();
+        Task task = Task.Run((Action)DriveAccess.Worker);
     }
+
+    private static void Watcher()
+    {
+        while (true)
+        {
+            Console.WriteLine($"{DateTime.Now:MM/dd/yyyy HH:mm:ss} I'm alive");
+            Thread.Sleep(5000);
+        }
+    }
+
     private static void StartListen()
     {
         while (true)
@@ -42,6 +53,13 @@ class Program
 
             Stopwatch sw = Stopwatch.StartNew();
             string request = Encoding.UTF8.GetString(requestBytes, 0, bytesRead);
+            if (string.IsNullOrEmpty(request))
+            {
+                Console.WriteLine("Empty request");
+                SendHeaders("", 400, "Bad Request", "", "", 0, ref stream);
+                client.Close();
+                continue;
+            }
             var requestHeaders = ParseHeaders(request);
 
             string[] requestFirstLine = requestHeaders.requestType.Split(" ");
@@ -108,28 +126,10 @@ class Program
     }
     private static async Task<(byte[]?, string)> GetContent(string requestedPath)
     {
-        if (imageIds == null)
-        {
-            imageIds = [];
-            var path = @"Drive/data.csv";
-            using (TextFieldParser csvParser = new TextFieldParser(path))
-            {
-                csvParser.CommentTokens = ["#"];
-                csvParser.SetDelimiters([","]);
-                csvParser.HasFieldsEnclosedInQuotes = true;
-
-                while (!csvParser.EndOfData)
-                {
-                    string[] fields = csvParser.ReadFields();
-                    imageIds.Add(fields[0]);
-                }
-            }
-        }
         string filePath = Path.Join(WebServerPath, requestedPath);
         if (filePath.Contains("image"))
         {
-            DriveAccess dr = new();
-            byte[]? bytes = await dr.GetFile(imageIds[rnd.Next(imageIds.Count)]);
+            byte[]? bytes = await DriveAccess.GetNextImage();
             return (bytes, "image");
         }
 
