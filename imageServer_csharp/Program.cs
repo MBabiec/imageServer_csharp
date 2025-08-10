@@ -82,7 +82,6 @@ class Program
                     if (requestFirstLine[0] != "GET")
                     {
                         SendHeaders(httpVersion, 405, "Method Not Allowed", contentType, contentEncoding, 0, stream);
-                        //DUPA
                     }
                 }
                 catch (Exception ex)
